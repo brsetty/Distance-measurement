@@ -1,0 +1,189 @@
+/******************************************************************************************************************
+*            Advanced embedded systems course - ECGR-5101
+*			 Grad project: Degign a distance measurement device using ultrasonic sensor and MSP430.
+*                         
+*
+* Reference:[1]MSP430 Datasheet
+*			[2]MSP430 user guide
+*			[3]https://www.instructables.com/Ultrasonic-Sensor-with-MSP430-and-IARCCS/
+*			[4]https://embeddeddiaries.com/msp430-distance-measurement-using-sr04-ultrasonic-sensor/
+*			[5]https://forum.allaboutcircuits.com/threads/msp430f5529-with-ultrasonic-hc-sr04.171252/
+*			[6]https://embeddeddiaries.com/msp430-distance-measurement-using-sr04-ultrasonic-sensor/						
+/******************************************************************************************************************/
+#include <msp430.h>
+
+void LEDMsb(int value);
+void LEDLsb(int value);
+
+uint8_t compare = 0,reset;
+uint16_t negativeEdge,positiveEdge,distance,difference;
+const uint16_t cycle = 30;
+
+int main()
+{
+    int echoPulse;      // time in us
+    int cmDist,mtDist,lsbDist,msbDist;
+    // Disable watchdog timer
+    WDTCTL = WDTPW + WDTHOLD;
+    // set direction for bit 1 which is used by sensor
+    P1DIR = BIT1;
+    P1DIR |= 0xF0;
+	//set direction as input for bit 2 which is used by sensor
+    P1IN = BIT2;
+    P2DIR |= 0x0F;
+
+    // set Timer-A:SMCLK Clock
+    TA0CCTL2 = CM_3 | CCIS_0 | SCS | CAP | CCIE;
+    TA0CTL = TASSEL__ACLK | MC__CONTINUOUS;
+	
+	//BCD inputs initialization
+	P1DIR |= BIT4|BIT5|BIT6|BIT7;
+	P2DIR |= BIT0|BIT1|BIT2|BIT3;
+	
+	__bis_SR_register(GIE);
+	
+    while(1)
+    {
+
+ //--------------------------------Send a 10us trigger pulse--------------------------------------------------------       
+        P1OUT |= BIT1;                // trigger high
+        __delay_cycles(10);           // 10us delay
+        P1OUT &= ~BIT1;               // trigger low
+//-------------------------measure the time taken to receive the pulse-----------------------------------------------
+        if(compare == 0x02)
+          {
+              __disable_interrupt();
+              TA0CTL = TACLR;
+              difference = negativeEdge - positiveEdge;
+			  distance = (cycle * difference) / 58;
+//-----------------------------------------display on seven segment----------------------------------------------------		
+			  mtDist = cmDist/10;
+			  msbDist = mtDist/10;
+			  lsbDist = mtDist % 10;
+			  LEDMsb(msbDist);
+			  LEDLsb(lsbDist);
+			  compare = 0x00;
+              __enable_interrupt();
+              P3OUT |= BIT3;
+              __delay_cycles(20);
+              P3OUT &= ~BIT3;
+              TA0CTL = TASSEL__ACLK | MC__CONTINUOUS;
+              reset = 0;
+		  }
+		  __delay_cycles(800000);
+            reset++;
+    }
+	 return 0;
+}
+//-----------------------------------------Timer interrupt----------------------------------------------------------------		
+#pragma vector = TIMER0_A1_VECTOR
+__interrupt void Timer0_A1_ISR(void)
+{
+  switch (__even_in_range(TA0IV, TA0IV_TAIFG)) {
+    case TA0IV_TA0CCR1:
+         break;
+    case TA0IV_TA0CCR2:
+        if(compare == 0x00)
+        {
+            //Capture the timer value when echo pin becomes high (ranging start)
+            positiveEdge = TA0CCR2;
+            compare = 0x01;
+        }
+        else if(compare == 0x01)
+        {
+            //Capture the timer value when echo pin becomes low (ranging stops)
+            negativeEdge = TA0CCR2;
+            compare = 0x02;
+        }
+		break;
+    case TA0IV_TA0IFG:
+		 break;
+    default:
+         break;
+  }
+}
+//-----------------------------------------seven segment display 1---------------------------------------------------------------		
+void LEDMsb(int value)
+{
+
+        switch(value)
+        {
+        case 0: P1OUT |= 0x00;
+                break;
+        case 1:
+                   P1OUT |= 0x10;
+                   break;
+        case 2:
+                   P1OUT|= 0x20;
+                   break;
+        case 3:
+                   P1OUT|= 0x30;
+                   break;
+        case 4:
+                   P1OUT|= 0x40;
+                   break;
+        case 5:
+                   P1OUT|= 0x50;
+                   break;
+        case 6:
+                   P1OUT|= 0x60;
+                   break;
+        case 7:
+                   P1OUT|= 0x70;
+                   break;
+        case 8:
+                   P1OUT|= 0x80;
+                   break;
+        case 9:
+                   P1OUT|= 0x90;
+                   break;
+        default:
+                   P1OUT|= 0x00;
+                   break;
+
+
+        }
+}
+//-----------------------------------------seven segment display 2---------------------------------------------------------------
+void LEDLsb(int value)
+        {
+            switch(value)
+            {
+
+            case 0:
+                       P2OUT|= 0x00;
+                       break;
+            case 1:
+                       P2OUT|= 0x01;
+                       break;
+            case 2:
+                       P2OUT|= 0x02;
+                      break;
+            case 3:
+                       P2OUT|= 0x03;
+                       break;
+            case 4:
+                       P2OUT|= 0x04;
+                       break;
+            case 5:
+                       P2OUT|= 0x05;
+                       break;
+            case 6:
+                       P2OUT|= 0x06;
+                       break;
+           case 7:
+                       P2OUT|= 0x07;
+                      break;
+           case 8:
+                       P2OUT|= 0x08;
+                       break;
+            case 9:
+                       P2OUT|= 0x09;
+                       break;
+            default:
+                       P2OUT|= 0x00;
+                       break;
+
+
+            }
+        }
